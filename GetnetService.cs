@@ -27,6 +27,7 @@ public class GetnetService
 
         var connString = _config["SqlConnectionString"];
         var deactivationEndpoint = _config["DeactivationEndpoint"];
+        var threshold = GetIntConfig("PendingCountThreshold", defaultValue: 10);
 
         if (string.IsNullOrWhiteSpace(connString) ||
             string.IsNullOrWhiteSpace(deactivationEndpoint))
@@ -37,15 +38,32 @@ public class GetnetService
 
         var count = await GetPendingCount(connString);
 
-        if (count <= 10)
+        if (count <= threshold)
         {
-            _logger.LogInformation("Status normal. Count={Count}. Nenhuma acao executada.", count);
+            _logger.LogInformation("Status normal. Count={Count}. Pagamentos Pendentes ={Threshold}. Nenhuma acao executada.", count, threshold);
             return;
         }
 
-        _logger.LogWarning("Falha detectada no gateway. Count={Count}. Iniciando desativacao.", count);
+        _logger.LogWarning("Falha detectada no gateway. Count={Count}. Pagamentos Pendentes ={Threshold}. Iniciando desativacao.", count, threshold);
 
         await InvokeDeactivationEndpoint(deactivationEndpoint);
+    }
+
+    private int GetIntConfig(string key, int defaultValue)
+    {
+        var raw = _config[key];
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return defaultValue;
+        }
+
+        if (int.TryParse(raw, out var value))
+        {
+            return value;
+        }
+
+        _logger.LogWarning("Valor invalido para {Key}='{Value}'. Usando default={DefaultValue}.", key, raw, defaultValue);
+        return defaultValue;
     }
 
     private static async Task<int> GetPendingCount(string connString)
@@ -84,9 +102,7 @@ public class GetnetService
             firstSegment = connString[..semicolonIndex];
         }
 
-        // Support inputs like "tcp:server.database.windows.net,1433;Database=..."
-        // by converting to a valid ADO.NET key/value pair:
-        // "Server=tcp:server.database.windows.net,1433;Database=..."
+   
         if (!firstSegment.Contains('='))
         {
             return $"Server={connString}";
