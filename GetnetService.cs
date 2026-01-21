@@ -50,6 +50,8 @@ public class GetnetService
 
     private static async Task<int> GetPendingCount(string connString)
     {
+        connString = NormalizeSqlConnectionString(connString);
+
         const string sql = @"
             SELECT COUNT(1)
             FROM dbo.pagamento
@@ -64,6 +66,33 @@ public class GetnetService
         var result = await cmd.ExecuteScalarAsync();
 
         return Convert.ToInt32(result);
+    }
+
+    private static string NormalizeSqlConnectionString(string rawConnectionString)
+    {
+        if (string.IsNullOrWhiteSpace(rawConnectionString))
+        {
+            return rawConnectionString;
+        }
+
+        var connString = rawConnectionString.Trim();
+
+        var firstSegment = connString;
+        var semicolonIndex = connString.IndexOf(';');
+        if (semicolonIndex >= 0)
+        {
+            firstSegment = connString[..semicolonIndex];
+        }
+
+        // Support inputs like "tcp:server.database.windows.net,1433;Database=..."
+        // by converting to a valid ADO.NET key/value pair:
+        // "Server=tcp:server.database.windows.net,1433;Database=..."
+        if (!firstSegment.Contains('='))
+        {
+            return $"Server={connString}";
+        }
+
+        return connString;
     }
 
     private async Task InvokeDeactivationEndpoint(string endpoint)
